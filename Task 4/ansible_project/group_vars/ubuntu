@@ -1,0 +1,7 @@
+---
+#ubuntu-c and target hosts should have the same user with the same password
+#suppose the user is "ng" and password is "ng"
+#password can be encrypted here, but I will skip step
+ansible_become: true
+ansible_become_pass: ng
+...

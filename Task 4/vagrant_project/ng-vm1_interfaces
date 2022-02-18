@@ -1,0 +1,21 @@
+# This file describes the network interfaces available on your system
+# and how to activate them.
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# Source interfaces
+# Please check /etc/network/interfaces.d before changing this file
+# as interfaces may have been defined in /etc/network/interfaces.d
+# See LP: #1262951
+source /etc/network/interfaces.d/*.cfg
+
+# eth0 has been already configured by vagrant to be connected to oracle vbox nat network, with DHCP option.
+
+#For eth1 which is connected to the host-only network:
+auto eth1
+iface eth1 inet static
+  address 172.16.1.1
+  netmask 255.255.0.0
+  dns-nameservers 8.8.8.8

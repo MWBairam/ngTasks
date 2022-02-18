@@ -1,0 +1,31 @@
+docker_compose_version: "1.25.0"
+
+dependencies_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+  - gnupg-agent
+  - lsb-release
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli 
+  - containerd.io
+
+db_monitoring_vm_hostname: "ng-vm2"
+web_app_vm_hostname: "ng-vm1"
+db_vm_ip: 172.16.1.1
+web_app_vm_ip: 172.16.1.2
+
+influxdb_configuration_dir: "/etc/influxdb"
+telegraf_configuration_dir: "/etc/telegraf"
+
+influxdb_node_ip: 172.16.1.1
+
+postgresql_port: 5432
+influxdb_port: 8086
+
+docker_override_ufw_iptables: "false"
+docker_configuration_dir: "/etc/docker"
+

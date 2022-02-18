@@ -1,0 +1,43 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+servers=[
+  {
+    :hostname => "ansible-controller",
+    :box => "ng/ubuntu-20.04",
+    :ram => 2048,
+    :cpu => 2,
+    :disk => "20GB",
+    :script => "sh /vagrant/ansible-controller_setup.sh"
+  },
+  {
+    :hostname => "ng-vm1",
+    :box => "ng/ubuntu-20.04",
+    :ram => 2048,
+    :cpu => 2,
+    :disk => "20GB",
+    :script => "sh /vagrant/ng-vm1_setup.sh"
+  },
+  {
+    :hostname => "ng-vm2",
+    :box => "ng/ubuntu-20.04",
+    :ram => 2048,
+    :cpu => 1,
+    :disk => "20",
+    :script => "sh /vagrant/ng-vm2_setup.sh"
+  }
+]
+
+Vagrant.configure(2) do |config|
+    servers.each do |machine|
+        config.vm.define machine[:hostname] do |node|
+            node.vm.box = machine[:box]
+            node.disksize.size = machine[:disk]
+            node.vm.hostname = machine[:hostname]
+            node.vm.provider "virtualbox" do |vb|
+                vb.customize ["modifyvm", :id, "--memory", machine[:ram], "--cpus", machine[:cpu]]
+                vb.customize ["modifyvm", :id, "--nic2", "hostonly", "--vNet3", "VirtualBox Host-Only Ethernet Adapter"]
+              end
+            node.vm.provision "shell", inline: machine[:script], privileged: true, run: "once"
+            end
+      end
+end

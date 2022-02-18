@@ -1,0 +1,106 @@
+//In ng-vm1:
+==============
+//now make sure ufw is enabled
+sudo ufw enable
+//By default, docker will bypass ufw rules,
+//Prevent Docker from manipulating iptables:
+//Ref: https://docs.docker.com/network/iptables/
+//Ref: https://dev.to/andylim0221/ufw-and-docker-security-on-linux-machine-oc3
+//Create this file:
+sudo vim /etc/docker/daemon.json
+{ "iptables": false }
+sudo chmod 644 /etc/docker/daemon.json
+sudo chown root:root /etc/docker/daemon.json
+//Then restart:
+sudo systemctl restart ufw
+sudo systemctl restart docker
+//allow ssh:
+sudo ufw allow 22/tcp
+//deny all incoming by default:
+sudo ufw default deny incoming 
+//open PostgreSql tcp port to be accessed from ng-vm2 webapp: 
+sudo ufw allow 5432/tcp
+//open influxdb tcp port to be accessed by ng-vm2 telegraf:
+sudo ufw allow 8086/tcp
+//open tcp ports localhost access to be able to visit :3000 grafana and :5050 pgadmin 
+sudo ufw allow from 127.0.0.1 to 127.0.0.1 proto tcp
+
+
+
+//In ng-vm2:
+=============
+//now make sure ufw is enabled
+sudo ufw enable
+//By default, docker will bypass ufw rules,
+//Prevent Docker from manipulating iptables:
+//Ref: https://docs.docker.com/network/iptables/
+//Ref: https://dev.to/andylim0221/ufw-and-docker-security-on-linux-machine-oc3
+//Create this file:
+sudo vim /etc/docker/daemon.json
+{ "iptables": false }
+sudo chmod 644 /etc/docker/daemon.json
+sudo chown root:root /etc/docker/daemon.json
+//Then restart:
+sudo systemctl restart ufw
+sudo systemctl restart docker
+//allow ssh:
+sudo ufw allow 22/tcp
+//deny all incoming by default:
+sudo ufw default deny incoming
+//open tcp ports localhost access to be able to visit :5001 webapp page:
+sudo ufw allow from 127.0.0.1 to 127.0.0.1 proto tcp
+
+
+
+
+
+
+//Notes:
+==========
+//Note1: If we publish a port by using option -p 8080:80, we should allow/deny the container port 80, not the host port 8080. Ref: https://github.com/chaifeng/ufw-docker/blob/master/README.md#solving-ufw-and-docker-issues
+
+//Note2: The grafana, and pgadmin webpages are now accessible from ng-vm1 locally only.
+
+//Note3: The webapp webpage is now accessible from ng-vm2 locally only.
+
+//Note4: ng-vm1 output:
+$ sudo ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+To                         Action      From
+--                         ------      ----
+127.0.0.1/tcp              ALLOW IN    127.0.0.1/tcp             
+5432/tcp                   ALLOW IN    Anywhere                  
+8086/tcp                   ALLOW IN    Anywhere                  
+5432/tcp (v6)              ALLOW IN    Anywhere (v6)             
+8086/tcp (v6)              ALLOW IN    Anywhere (v6)  
+22/tcp                     ALLOW IN    Anywhere                  
+22/tcp (v6)                ALLOW IN    Anywhere (v6)            
+
+//Note5: ng-vm2 output:
+$sudo ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), deny (routed)
+New profiles: skip
+To                         Action      From
+--                         ------      ----
+127.0.0.1/tcp              ALLOW IN    127.0.0.1/tcp   
+22/tcp                     ALLOW IN    Anywhere                  
+22/tcp (v6)                ALLOW IN    Anywhere (v6)           
+
+
+
+
+
+
+
+
+
+
+
+
+
+

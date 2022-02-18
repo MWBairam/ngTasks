@@ -1,0 +1,309 @@
+---
+# YAML documents begin with the document separator ---
+
+# The minus in YAML this indicates a list item.  The playbook contains a list
+# of plays, with each play being a dictionary
+-
+
+  # Hosts: where our play will run and options it will run with
+  hosts: ubuntu
+
+  # Vars: variables that will apply to the play, on all target systems
+  vars_files:
+    - vars/ansible_variables.yaml
+
+  # Tasks: the list of tasks that will be executed within the play, this section
+  # The playbook could have been splitted into 2 sections with the dash, each section works with one VM,
+  # I will not do that to avoide repetition, I will use the "when" directive instead. 
+  # Different tasks could have been organized within roles created by ansible-galaxy, anyway, I wrote them all in one playbook. 
+  # Usually, using the collected facts by the default setup module, we identify the distribution. Here I already know it is ubuntu. 
+  
+  tasks:
+
+    #Install docker in both VMs
+    - name: Update apt cache
+      apt: update_cache=yes cache_valid_time=3600
+
+    - name: Upgrade all apt packages
+      apt: upgrade=dist
+
+    - name: Install dependencies
+      apt:
+        name: "{{ dependencies_packages }}"
+        state: present
+        update_cache: yes
+      
+    - name: Add an apt signing key for Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add apt repository for stable version
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: yes
+
+    - name: Add ansible user to docker group
+      user:
+        name: "ng"
+        group: docker
+    
+    #Install docker-compose in both VMs (might use it or no, anyway, install it)
+    - name: Download docker-compose {{ docker_compose_version }}
+      get_url:
+        url : https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-Linux-x86_64
+        dest: ~/docker-compose
+        mode: '+x'
+
+    - name: Check docker-compose exists
+      stat: path=~/docker-compose
+      register: docker_compose
+
+    - name: Move docker-compose to /usr/local/bin/docker-compose
+      command: mv ~/docker-compose /usr/local/bin/docker-compose
+      when: docker_compose.stat.exists
+
+    #Pull and run db and monitoring docker images
+    - name: Pull and run the postgresql container
+      docker:
+        name: pg_container
+        image: postgres
+        restart: always
+        env:
+           POSTGRES_PASSWORD: secret
+           POSTGRES_USER: dbuser  
+        ports:
+        - 5432:5432
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+     
+    - name: pull and run the pgadmin container
+      docker:
+        name: pgadmin_container
+        image: dpage/pgadmin4
+        restart: always
+        env:
+          PGADMIN_DEFAULT_EMAIL: admin@admin.com
+          PGADMIN_DEFAULT_PASSWORD: secret
+        ports:
+        - 5050:80
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+      
+      #Pull and run web app docker image 
+      - name: pull and run the developed webapp 
+        docker:
+          name: ngwebapp_container
+          image: mmhdwaledbairam/ng_web_app:ngwebapp
+          restart: always
+          ports:
+          - 5001:80
+        when: ansible_hostname == "{{ web_app_vm_hostname }}"
+
+    #Install telegraf, influxdb, and grafana in db and monitoring VM,
+    #Install telegraf in the web app VM and connect it with the monitoring VM
+    - name: install grafana v7.4.5 from a package on internet
+      apt:
+        deb: https://dl.grafana.com/enterprise/release/grafana-enterprise_7.4.5_amd64.deb
+        state: present
+      notify: Systemd Reload  
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+      
+    - name: Enable grafana
+      service:
+        name: grafana
+        enabled: yes 
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+    - name: Start grafana
+      service:
+        name: grafana
+        state: started
+      notify: Check grfana HTTP Service
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+    - name: install influxdb v1.8.4 from a package on internet 
+      apt:
+        deb: https://dl.influxdata.com/influxdb/releases/influxdb_1.8.4_amd64.deb
+        state: present
+      notify: Systemd Reload
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+    - name: Enable influxdb
+      service:
+        name: influxdb
+        enabled: yes 
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+    - name: Start influxdb
+      service:
+        name: influxdb
+        state: started
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+    - name: install Telegraf v1.18.0 from a package on internet 
+      apt:
+        deb: https://dl.influxdata.com/telegraf/releases/telegraf_1.18.0-1_amd64.deb
+        state: present
+      notify: Systemd Reload
+
+    - name: Enable Telegraf
+      service:
+        name: telegraf
+        enabled: yes 
+
+    - name: Start Telegraf
+      service:
+        name: telegraf
+        state: started
+
+    #We can use the copy module instead of the below since .conf influxdb files do not have jinja templating lines
+    #influxdb conf file has http endpoint auth disabled
+    - name: Template influxdb.conf.j2 to influxdb.conf 
+      template:
+        src: influxdb.conf.j2
+        dest: "{{ influxdb_configuration_dir }}/influxdb.conf"
+        mode: 0644
+      notify: Restart influxdb
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"	
+		
+    #telegraf config file has outputs.influxdb and inputs.docker configured.
+    #in both VMs, we should have:
+    ####[[outputs.influxdb]]
+    ####urls = ["http://VM1_IP:8086"]
+    #so, in that file, you will find: urls = ["http://{{ influxdb_node_ip }}:8086"], and it will be filled from ansible_variables files.
+    - name: Template telegraf.conf.j2 to telegraf.conf 
+      template:
+        src: telegraf.conf.j2
+        dest: "{{ telegraf_configuration_dir }}/telegraf.conf"
+        mode: '0644'
+      notify: Restart telegraf 
+        
+    - name: Change /var/run/docker.sock permissions
+      file:
+        path: /var/run/docker.sock
+        mode: '0666'
+      notify: 
+        - Restart influxdb
+        - Restart telegraf
+
+    - name: Create influxdb datasource in grafana 
+      grafana_datasource:
+        name: influxdb
+        grafana_url: http://localhost:3000
+        grafana_user: "admin"
+        grafana_password: "admin"
+        type: influxdb
+        url: https://localhost:8086
+        database: telegraf 
+        state: present
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+    	
+    - name: Import Grafana dashboard. It is preconfigured to read datasource "influxdb" 
+      grafana_dashboard:
+        grafana_url: http://grafana.company.com
+        grafana_url: http://localhost:3000
+        grafana_user: "admin"
+        grafana_password: "admin"
+        state: present
+        overwrite: yes
+        path: ../dashboards/ContainersMonitoring-1645101833602.json
+      notify: Restart grafana
+      when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+
+     #for firewall, I will use ufw instead of iptables as another approach
+     #First, enable it, and keep ssh allowed
+     - name: Enable UFW and allow ssh
+       ufw:
+         state: enabled
+         rule: allow
+         proto: tcp
+         port: 22
+         
+     - name: Deny all incoming as a default 
+       ufw:
+         direction: in
+         proto: any 
+         policy: deny
+     
+     - name: Allow localhost to localhost any port for management:
+       ufw:
+         rule: allow 
+         src: localhost 
+         dest: localhost 
+         proto: tcp 
+     	
+     - name: Allow incoming access to postgresdb 
+       ufw:
+         rule: allow
+         direction: in
+         proto: tcp
+         src: {{ web_app_vm_ip }}
+         dest: {{ db_vm_ip  }}
+         to_port: {{ postgresql_port }}
+       when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+         
+     - name: Allow incoming access to influxdb  
+       ufw:
+         rule: allow
+         direction: in
+         proto: tcp
+         src: {{ web_app_vm_ip }}
+         dest: {{ db_vm_ip  }}
+         to_port: {{ influxdb_port }}
+       when: ansible_hostname == "{{ db_monitoring_vm_hostname }}"
+       
+     - name: Stop docker bypassing UFW rules:
+       template:
+         src: daemon.json.j2
+         dest: "{{ docker_configuration_dir }}/daemon.json"
+         mode: 0644
+         owner: root
+         group: root 
+         notify: 
+           -  Restart docker 
+           -  Restart ufw  
+
+  # Handlers: the list of handlers that are executed as a notify key from a task
+  handlers:
+  
+    - name: Check grafan HTTP Service
+    uri:
+      url: http://localhost:3000
+      status_code: 200 
+
+    - name: Restart influxdb
+      service:
+        name: influxdb
+        state: restarted	
+        
+    - name: Restart telegraf
+      service:
+        name: telegraf
+        state: restarted
+
+    - name: Restart grafana
+      service:
+        name: grafana
+        state: restarted
+        
+    - name: Systemd Reload
+      systemd:
+        daemon_reload: yes
+        
+    - name: Restart ufw
+      service:
+        name: ufw
+        state: restarted
+        
+    - name: Restart docker
+      service:
+        name: docker
+        state: restarted
+
+# Three dots indicate the end of a YAML document
+...

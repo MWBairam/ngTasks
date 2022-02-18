@@ -1,0 +1,10 @@
+[control]
+ansible-controller
+#I am supposing a third vm to work as Ansible first/control node.
+#Anyway, the Ansible first/control node can be anyone of the ng-vm1 or ng-vm2 instead. 
+
+
+[ubuntu]
+ng-vm1
+ng-vm2
+

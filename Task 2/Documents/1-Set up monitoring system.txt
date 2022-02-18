@@ -1,0 +1,203 @@
+//No hands on promethus from before.
+//Since our target is to monitor docker container, I will use a different approach.
+//Use telegraf to collect data, dump the data in influxdb, read the data from grafana.
+//Those tools can be installed in containers, but will install them as normal processes directly to the os.
+
+
+//In ng-vm1:
+=============
+=============
+
+1.download grafana v7.4.5 (this is not the latest version):
+-Link: https://grafana.com/grafana/download/7.4.5
+-Installation:
+$sudo apt-get install -y adduser libfontconfig1
+$wget https://dl.grafana.com/enterprise/release/grafana-enterprise_7.4.5_amd64.deb
+$sudo dpkg -i grafana-enterprise_7.4.5_amd64.deb
+$sudo /bin/systemctl daemon-reload
+$sudo /bin/systemctl enable grafana-server.service
+$sudo /bin/systemctl start grafana-server.service
+//then visit http://localhost:3000 admin/admin
+
+
+
+
+
+2.download influxdb v1.8.4 (this is not the latest version): 
+-Link: https://portal.influxdata.com/downloads/
+-Installation:
+$wget https://dl.influxdata.com/influxdb/releases/influxdb_1.8.4_amd64.deb
+$sudo dpkg -i influxdb_1.8.4_amd64.deb
+$sudo /bin/systemctl daemon-reload
+$sudo systemctl enable influxdb
+$sudo systemctl start influxdb
+$sudo systemctl status influxdb
+//then you can visit http://localhost:8086 a page appears to ask you to create a user: admin/adminadmin , org name: test, bucket name: test 
+
+
+
+
+
+
+
+
+
+
+3.download Telegraf v1.18.0 (this is not the latest version): 
+-Link: https://portal.influxdata.com/downloads/
+-Installation:
+$wget https://dl.influxdata.com/telegraf/releases/telegraf_1.18.0-1_amd64.deb
+$sudo dpkg -i telegraf_1.18.0-1_amd64.deb
+$sudo /bin/systemctl daemon-reload
+$sudo systemctl enable telegraf
+$sudo systemctl start telegraf
+$sudo systemctl status telegraf
+
+
+
+
+
+
+
+
+
+
+
+
+
+4.modify telegraf (data collector) to dump/send data to influxdb we installed:
+#vim /etc/telegraf/telegraf.conf:
+//in [outputs.influxdb] part add:
+url = ["http://127.0.0.1:8086"]
+//which is the influx address on this machine
+-then restart:
+$sudo systemctl restart telegraf
+-Then, we need to check if "telegraf" created its DB in the influxdb schema:
+we need to connect to influxdb, and we will use "influx" tool, then use the "show databases" command, and we find DB called telegraf has been created:
+$influx
+Connected to http://localhost:8086 version 1.8.4
+InfluxDB shell version: 1.8.4
+> show databases
+name: databases
+name
+----
+telegraf
+> use telegraf
+Using database telegraf
+> show measurements
+me: measurements
+name
+----
+cpu
+disk
+diskio
+kernel
+mem
+processes
+swap
+system
+
+//Note:
+-When performing the command "show databases" we might get error of http 401 (unauthorized), so we need to do authentication with the influxdb http endpoint first before
+we use the influx tool. To do that, look at this link: https://docs.influxdata.com/influxdb/v1.8/administration/authentication_and_authorization/
+-For me, I disabled the authentication via:
+#vim /etc/influxdb/influxdb.conf 
+go to [http] part, make auth to false: 
+# Determines whether user authentication is enabled over HTTP/HTTPS.
+  auth-enabled = false
+  
+//Note:
+-The tool "influx" is functional for the versions 1.8.x 
+but for the next versions 2.0.x, there is a new oss system https://docs.influxdata.com/influxdb/v2.0/
+whereas the 1.8.x oss system docs is https://docs.influxdata.com/influxdb/v1.8/
+
+//Note:
+-Here we connected telegraf v1.18.0 with influxdb v1.8.4
+-For the upper newer version, the connection method is different, and the versions compatibility matrix is different.
+
+
+
+7.Monitoring Docker Containers:
+-Installed docker engine from here https://docs.docker.com/engine/install/centos/ 
+-Now activate the docker statistics collection in telegraf config file:
+$sudo vim /etc/telegraf/telegraf.conf 
+[[inputs.docker]]
+endpoint = "unix:///var/run/docker.sock"
+//the above line is enough, but if we want to include/exclude containers, we can use those lines:
+container_name_include = []
+container_name_exclude = []
+-Then restart telegraf service:
+$sudo systemctl restart telegraf  
+-There will be an error related to permissions
+To discard it:
+$sudo chmod 666 /var/run/docker.sock 
+$sudo systemctl restart influxd
+$sudo systemctl restart telegraf 
+//this chmod might be needed each time the server restarts/docker restarts !!
+-Now if we do "show measurements" for the telegraf DB in influxdb as we did in step 4, we find docker measrements are existed:
+> 
+> show measurements
+name: measurements
+name
+----
+cpu
+disk
+diskio
+docker
+docker_container_blkio
+docker_container_cpu
+docker_container_mem
+docker_container_net
+docker_container_status
+http_response
+kernel
+mem
+processes
+swap
+system
+
+-Now, login to grafana http://localhost:3000 admin/admin, create grafan charts to display statastics about docker containers number, uptime, .....:
+First, go to datasources, add influxdb datasource: url=http://localhost:8086, database name=telegraf (remember that telegraf added a db in influxdb called telegraf).
+Second, create a dashboard, add a stat panel, and ......., add a variable to list the monitored machines (influxdb can query the hostnames), 
+then, query containers info from influxdb source, FROM default docker WHERE host = $Server, SELECT field(n_containers) to check the number of containers for example.
+other panels are ......
+//Please take a look on the screenshots.
+
+
+
+
+//In ng-vm2:
+=============
+=============
+1.download Telegraf v1.18.0 (this is not the latest version): 
+-Link: https://portal.influxdata.com/downloads/
+-Installation:
+$wget https://dl.influxdata.com/telegraf/releases/telegraf_1.18.0-1_amd64.deb
+$sudo dpkg -i telegraf_1.18.0-1_amd64.deb
+$sudo /bin/systemctl daemon-reload
+$sudo systemctl enable telegraf
+$sudo systemctl start telegraf
+$sudo systemctl status telegraf
+
+
+2.modify telegraf (data collector) to dump/send data to influxdb we installed and configured in ng-vm2:
+#vim /etc/telegraf/telegraf.conf:
+//in [outputs.influxdb] part add:
+url = ["http://_ng-vm1_IP:8086"]
+//which is the influx address on this machine
+[[inputs.docker]]
+endpoint = "unix:///var/run/docker.sock"
+//the above line is enough, but if we want to include/exclude containers, we can use those lines:
+container_name_include = []
+container_name_exclude = []
+-then restart:
+$sudo systemctl restart telegraf
+-There will be an error related to permissions
+To discard it:
+$sudo chmod 666 /var/run/docker.sock 
+$sudo systemctl restart influxd
+$sudo systemctl restart telegraf 
+//this chmod might be needed each time the server restarts/docker restarts !!
+
+
+3-Now go to ng-vm1, open grafana dashboard we imported, it has a variable to list hostnamees, you will see a new hostname appears in the $Servers variable of that dashboard. 

@@ -1,0 +1,199 @@
+Web app was developed on my host (laptop) of windows 10, to containerize it, use Docker desktop:
+=================================================================================================
+-VMware and Docker desktop do not work together, so I will stop VMware until I containerize the app, and push an image, then will enable VMware again:
+-to run docker desktop:
+1-go to "Turn Windows features on or off" and tick hyper-v.
+2-open cmd as admin:
+>bcdedit /enum {current} //this will show that hypervisorlaunchtype: off
+//make it off:
+>bcdedit /set hypervisorlaunchtype Auto
+3-restart pc
+if you want to start VMware again, re-enable the above steps.
+
+
+
+
+
+
+
+
+
+
+
+//remember, .NET 5.0 is the next step after .NET Core 3.1, but without the "Core" keyword.
+//check SDK and runtime we have, should be for .NET 5.0
+dotnet --list-runtimes 
+dotnet --list-sdks
+
+
+
+
+
+
+
+
+
+
+
+
+//We have 2 methods to containerize the app:
+//1-Method1: 
+//1-1-create base container with SDK and runtime, 
+//1-2-copy .csproj file to the container, 
+//1-3-perform the command "dotnet restore" to download the dependencies and packages inside the container using SDK, 
+//1-4-publish/build the dll files inside the container, 
+//1-5-create a working directory inside the container and copy dll files from default publish directory to it, 
+//1-5-go to that folder, then entry point is perform "dotnet <project_name.dll>" to start the project over the runtime.
+//Method2: 
+//2-1-create a base container with the dotnet runtime only, 
+//2-2-publich/build the dll files outside the container on your local host, 
+//3-2-just copy published files to a working directory in the container, then entry point is perform "dotnet <project_name.dll>" to start the project over the runtime.
+//We can use .dockerignore file to ignore packaging what we want into the container, but I did not use it. 
+//Used Method2.
+
+
+
+
+
+
+
+
+
+
+
+
+//1-Publish the project:
+//from powershell:
+//cd to solution folder:
+>dotnet publish -c Release
+//then the app is published here:
+//.....to_solution_dir\ng_task1_web_project\bin\Release\net5.0\publish
+//confirm and make sure the published project is working:
+//cd to that publish folder, then run:
+>dotnet ng_task1_web_project.dll 
+//it will work with urls https://localhost:5001 and http://localhost:5000
+(in launchSettings.json that is specified. Do not confuse with the ports in iisExpress parameters, that is only for visual studio iisExpress)
+
+//2-start windows Docker desktop.
+
+//3-Right click on the project, add -> new -> docker support 
+(Dockerfile will be added to the project folder, also settings will be added e.g. in launchSettings.json)
+//Docker file:
+#build outside docker:
+#======================
+FROM mcr.microsoft.com/dotnet/aspnet:5.0
+COPY bin/Release/net5.0/publish/ App/
+WORKDIR /App
+#the app can work on anyport, however, just leave it in this example on 80
+EXPOSE 80
+#EXPOSE 443
+EXPOSE 5001
+#EXPOSE 5000
+ENTRYPOINT ["dotnet", "ng_task1_web_project.dll"]
+
+//Do not use Docker buttons in visual studio, a lot of issues might happen.
+//we will use docker command line to control our instructions.
+//from powershell:
+//cd to project folder and build an image of your project:
+>docker build -t ngwebapp_image -f Dockerfile . 
+//the dot means the local folder here, -f to choose the Dockerfile we designed
+//check the image is built now:
+>docker image 
+//you will find 2 lines, one with the name ngwebapp_image, and one with the name mcr.microsoft.com/dotnet/runtime 5.0
+
+//now we have an image with a published data, let us run a container on the development machine using that image: 
+docker run -it -p 5001:80 --name ngwebapp_container ngwebapp_image 
+//-it interactive mode (not -d detached/background mode) and with a tty to make sure a persistent one dedicated for this container.
+//the application inside the container runs on port 80, I want to access the container from local machine using port 5001, so map 5001 on my local machine to 80 in the container.
+//The web app will by default reun on port 80, that could have been changed by using other parameters in Dockerfile, and launchSettings.json Docker block. But I skipped that.
+//Or, another suggestion, the container could have been created with apache server to work as a proxy inside the container, for example:
+//inside the container, the webapp works on port 80, configure apache to forward requests on port 443 to 80,
+//run the container with -p 5001:443
+//Anyway, I did not perform that suggestion.  
+
+//we can open the url http://localhost:5001 to open the application.
+
+//check the running container:
+>docker ps -a 
+
+//Note: instead of docker run, you can use docker create and docker start.
+
+4-Now push it to my public DockerHub:
+//in powershell:
+docker login --username=mhdwaledbairam
+//write the password.
+//take the image id
+docker images 
+docker tag bb38976d03cf mhdwaledbairam/ng_web_app:ngwebapp_image 
+//mhdwaledbairam is my dockerhub username, ng_web_app is the repo neame, after the colon is the tag to be applied ont he image id, I kept the tag is the name of the image.
+//now push it
+docker push mhdwaledbairam/ng_web_app:ngwebapp_image  
+
+5-In the ng-vm2:
+//Install docker:
+//Install Docker: https://docs.docker.com/engine/install/ubuntu/  
+//Install Docker-compose sudo apt install docker-compose.
+
+//pull the image: 
+$sudo docker pull mhdwaledbairam/ng_web_app:ngwebapp_image
+
+//install dotnet 5.0.1 runtime:
+//please skip this step as the app in running in a container with its run time.
+$wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+$sudo dpkg -i packages-microsoft-prod.deb
+$rm packages-microsoft-prod.deb
+$sudo apt-get update; \
+  sudo apt-get install -y apt-transport-https && \
+  sudo apt-get update && \
+  sudo apt-get install -y aspnetcore-runtime-6.0
+  
+//now create and start a container:
+sudo docker run -it -p 5001:80 --name ngwebapp_container mhdwaledbairam/ng_web_app:ngwebapp_image 
+//The visit http:localhost:5001
+
+//next time:
+docker start ngwebapp_container 
+
+//get inside the contianer:
+docker exec -it <container name> /bin/bash
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,37 @@
+1-)ufw_commands:
+it is a file that contains commands to be performed manually.
+the commands use ports only.
+
+2-)ufw_script.sh:
+it is a file to execute the previous commands as an automated script.
+Example: ./ufw_script.sh
+Note1: Perform this script once in each vm. Do not forget to make it executable first.
+
+
+
+3-)ufw_commands_advanced:
+it is a file that contains commands to be performed manually.
+the commands use ports and IPs for more flexibility.
+
+4-)ufw_script_advanced.sh:
+it is a file to execute the previous commands as an automated script.
+Example: ./ufw_script_advanced.sh -crip 172.16.1.1 -cpip 172.16.1.2 -psqlport 5432 -fport 8086 
+Note1: Perform this script in one (any) vm since it will ssh the other vm automatically. Do not forget to make it executable first.
+Note2: This script requiers:
+       a-A one user created in both VMs/Nodes, for example "ng", and that user is a sudoer. 
+	   b-sudo apt install open-ssh.server in both VMs/Nodes.
+	   c-Using "ng" user in ng-vm1, run: ssh-keygen (enter for all prompts), then copy the content of /home/ng/.ssh/id_rsa.pub to ng-vm2 /home/ng/.ssh/authorized_keys (and chmod 600 authorized_keys). And vice versa. Thus, we have password-less key-based ssh login between the 2 VMs/Nodes using the user "ng".
+	   d-This script supposes ufw was disabled, thus port 22/tcp is allowed so far.
+	   e-Now run the script in any VM/Node with the user "ng".
+
+
+
+
+
+
+
+Other Notes:
+=============
+-After performing the commands/scripts, docker containers might be down because we retsarted docker, re start them.
+-The scripts were developed in a windows 10 machine, do not forget to convert from the dos end of line format to the linux one as specified in the screenshots.
+

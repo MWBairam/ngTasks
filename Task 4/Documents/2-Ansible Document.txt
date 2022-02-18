@@ -1,0 +1,38 @@
+Ansible:
+=========
+-I did not spend much time tesing the project, specially for grafana modules, anyway, we can say it is a starting point.
+-Prequisities:
+1-Ansible installed in the control node.
+2-We will consider that we have a third VM, it works as a first node/control node.
+3-A user is created in all the nodes, let us call the user "ng" and with password-less sudoers permissions.
+(This user should have been created from the vagrant phase)
+4-Activate manually the SSH password-less key-based from the control node, towards the two target nodes, with the user "ng".
+5-/etc/hosts is configured in the control node to resolve the two target nodes hostnames in case we used hostnames instead of IPs in the ansible_variables.yaml (This should have been created from the vagrant phase)
+
+
+//Few test commands to be done in the project folder where hosts file is existed.
+ansible all -m ping -o
+ansible all --list-hosts 
+ansible all -m command -a 'hostname' -o 
+ansible all -i centos2, -m setup | more
+  
+  
+//To deploy:
+//cd to ansible project directory:
+$ansible-playbook playbook
+  
+  
+  
+  
+
+  
+  
+	
+
+  
+  
+  
+  
+  
+  
+  
